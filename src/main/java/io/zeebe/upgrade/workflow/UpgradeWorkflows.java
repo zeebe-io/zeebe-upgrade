@@ -7,9 +7,9 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -49,7 +49,7 @@ public final class UpgradeWorkflows {
   private static void upgradeWorkflows(final Path sourcePath, final Path targetPath)
       throws IOException {
     final AtomicInteger updatedWorkflows = new AtomicInteger();
-    final List<Path> bpmnWithFailures = new ArrayList<>();
+    final Map<Path, Exception> bpmnWithFailures = new HashMap<>();
 
     Files.walk(sourcePath, FileVisitOption.FOLLOW_LINKS)
         .filter(UpgradeWorkflows::isBpmnFile)
@@ -69,20 +69,20 @@ public final class UpgradeWorkflows {
                 updatedWorkflows.incrementAndGet();
 
               } catch (Exception e) {
-                e.printStackTrace();
-
-                bpmnWithFailures.add(path);
+                bpmnWithFailures.put(path, e);
               }
             });
 
     System.out.printf("Done. Upgraded %d workflows.\n", updatedWorkflows.get());
-    if (!bpmnWithFailures.isEmpty()) {
-      final var bpmnFiles =
-          bpmnWithFailures.stream()
-              .map(path -> path.toAbsolutePath().toString())
-              .collect(Collectors.joining("\n"));
 
-      System.out.printf("Unable to upgrade %d workflows:\n%s", bpmnWithFailures.size(), bpmnFiles);
+    if (!bpmnWithFailures.isEmpty()) {
+      System.out.printf("Unable to upgrade %d workflows:\n", bpmnWithFailures.size());
+
+      bpmnWithFailures.forEach(
+          (path, failure) -> {
+            System.out.printf("> %s:\n", path.toAbsolutePath());
+            failure.printStackTrace();
+          });
     }
   }
 
@@ -90,7 +90,7 @@ public final class UpgradeWorkflows {
       throws IOException {
     // the model API insert a lot of empty new lines
     final var bpmnString = Bpmn.convertToString(upgradedWorkflow);
-    final var lines = bpmnString.split("\n");
+    final var lines = bpmnString.split(System.lineSeparator());
     final var linesWithoutBlankLines =
         Stream.of(lines).filter(line -> !line.isBlank()).collect(Collectors.toList());
 
