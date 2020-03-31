@@ -6,6 +6,7 @@ import io.zeebe.model.bpmn.instance.ConditionExpression;
 import io.zeebe.model.bpmn.instance.zeebe.ZeebeIoMapping;
 import io.zeebe.model.bpmn.instance.zeebe.ZeebeLoopCharacteristics;
 import io.zeebe.model.bpmn.instance.zeebe.ZeebeSubscription;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -110,13 +111,16 @@ public final class WorkflowExpressionUpgrade {
       Consumer<String> expressionSetter,
       BiConsumer<String, String> onChange) {
 
-    final var expression = expressionGetter.get();
-    var newExpression = migrateExpression.apply(expression);
+    Optional.ofNullable(expressionGetter.get())
+        .ifPresent(
+            expression -> {
+              var newExpression = migrateExpression.apply(expression);
 
-    if (!expression.equals(newExpression)) {
-      expressionSetter.accept(newExpression);
-      onChange.accept(expression, newExpression);
-    }
+              if (!expression.equals(newExpression)) {
+                expressionSetter.accept(newExpression);
+                onChange.accept(expression, newExpression);
+              }
+            });
   }
 
   private static String addExpressionPrefix(String expression) {
