@@ -3,13 +3,14 @@ package io.zeebe.upgrade.workflow;
 import io.zeebe.model.bpmn.Bpmn;
 import io.zeebe.model.bpmn.BpmnModelInstance;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class UpgradeWorkflows {
 
@@ -67,9 +68,14 @@ public final class UpgradeWorkflows {
   }
 
   private static void writeWorkflow(final BpmnModelInstance upgradedWorkflow, final Path target) {
+    // the model API insert a lot of empty new lines
+    final var bpmnString = Bpmn.convertToString(upgradedWorkflow);
+    final var lines = bpmnString.split("\n");
+    final var linesWithoutBlankLines =
+        Stream.of(lines).filter(line -> !line.isBlank()).collect(Collectors.toList());
+
     try {
-      final OutputStream outputStream = Files.newOutputStream(target);
-      Bpmn.writeModelToStream(outputStream, upgradedWorkflow);
+      Files.write(target, linesWithoutBlankLines);
     } catch (IOException e) {
       e.printStackTrace();
     }
