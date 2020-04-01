@@ -3,13 +3,16 @@ package io.zeebe.upgrade.workflow;
 import io.zeebe.model.bpmn.Bpmn;
 import io.zeebe.model.bpmn.BpmnModelInstance;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class UpgradeWorkflows {
 
@@ -46,33 +49,55 @@ public final class UpgradeWorkflows {
   private static void upgradeWorkflows(final Path sourcePath, final Path targetPath)
       throws IOException {
     final AtomicInteger updatedWorkflows = new AtomicInteger();
+    final Map<Path, Exception> bpmnWithFailures = new HashMap<>();
 
     Files.walk(sourcePath, FileVisitOption.FOLLOW_LINKS)
         .filter(UpgradeWorkflows::isBpmnFile)
         .peek(path -> System.out.printf("> Upgrade BPMN file '%s'\n", path.toAbsolutePath()))
         .forEach(
             path -> {
-              final var workflow = readBpmnFile(path);
-              final var upgradedWorkflow = WorkflowExpressionUpgrade.upgradeWorkflow(workflow);
+              try {
 
-              final var relativePath = sourcePath.relativize(path);
-              final var target = targetPath.resolve(relativePath);
+                final var workflow = readBpmnFile(path);
+                final var upgradedWorkflow = WorkflowExpressionUpgrade.upgradeWorkflow(workflow);
 
-              writeWorkflow(upgradedWorkflow, target);
+                final var relativePath = sourcePath.relativize(path);
+                final var target = targetPath.resolve(relativePath);
 
-              updatedWorkflows.incrementAndGet();
+                writeWorkflow(upgradedWorkflow, target);
+
+                updatedWorkflows.incrementAndGet();
+
+              } catch (Exception e) {
+                bpmnWithFailures.put(path, e);
+              }
             });
 
     System.out.printf("Done. Upgraded %d workflows.\n", updatedWorkflows.get());
+
+    if (!bpmnWithFailures.isEmpty()) {
+      System.out.printf("Unable to upgrade %d workflows:\n", bpmnWithFailures.size());
+
+      bpmnWithFailures.forEach(
+          (path, failure) -> {
+            System.out.printf("> %s:\n", path.toAbsolutePath());
+            failure.printStackTrace();
+          });
+    }
   }
 
-  private static void writeWorkflow(final BpmnModelInstance upgradedWorkflow, final Path target) {
-    try {
-      final OutputStream outputStream = Files.newOutputStream(target);
-      Bpmn.writeModelToStream(outputStream, upgradedWorkflow);
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
+  private static void writeWorkflow(final BpmnModelInstance upgradedWorkflow, final Path target)
+      throws IOException {
+    // the model API insert a lot of empty new lines
+    final var bpmnString = Bpmn.convertToString(upgradedWorkflow);
+    final var lines = bpmnString.split(System.lineSeparator());
+    final var linesWithoutBlankLines =
+        Stream.of(lines).filter(line -> !line.isBlank()).collect(Collectors.toList());
+
+    // create nested directories
+    Files.createDirectories(target.getParent());
+
+    Files.write(target, linesWithoutBlankLines);
   }
 
   private static BpmnModelInstance readBpmnFile(Path path) {
