@@ -4,6 +4,8 @@ This repository contains tools that helps to upgrade Zeebe from an old version t
 
 ## Usage
 
+Download a release from the [releases page](https://github.com/zeebe-io/zeebe-upgrade/releases).
+
 Upgrade BPMN workflows using the following command: 
 
 `java -jar zeebe-upgrade-workflows.jar <source-directory>  <target-directory>`
